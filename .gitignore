@@ -1,0 +1,12 @@
+# Contains live connection strings/secrets — see appsettings.example.json for the required shape.
+# Real values belong in Azure App Service Application Settings / user-secrets, not this file.
+appsettings.json
+
+# User-specific files
+*.user
+*.suo
+.vs/
+
+# Build results
+[Bb]in/
+[Oo]bj/
