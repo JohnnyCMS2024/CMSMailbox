@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>CMS Mailbox</title>
+    <style>
+        body { font-family: Segoe UI, Arial, sans-serif; margin: 0; background: #f4f6f8; color: #222; }
+        #loginScreen { max-width: 360px; margin: 80px auto; background: #fff; padding: 24px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        #loginScreen input { width: 100%; padding: 8px; margin: 6px 0 14px; box-sizing: border-box; }
+        #loginScreen button { width: 100%; padding: 10px; background: #2c6bd6; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        #appScreen { display: none; height: 100vh; }
+        #topBar { background: #1a2c42; color: #fff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; }
+        #layout { display: flex; height: calc(100vh - 44px); }
+        #inboxList { width: 320px; overflow-y: auto; background: #fff; border-right: 1px solid #ddd; }
+        .msgRow { padding: 10px 14px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .msgRow:hover { background: #f0f4fa; }
+        .msgRow.unread { font-weight: bold; }
+        .msgRow .subj { display: block; }
+        .msgRow .meta { font-size: 12px; color: #777; font-weight: normal; }
+        #messagePane { flex: 1; padding: 20px; overflow-y: auto; }
+        .itemCard { border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin: 8px 0; background: #fff; }
+        .itemCard button { padding: 6px 12px; }
+        table.fieldTable { border-collapse: collapse; width: 100%; margin-top: 8px; }
+        table.fieldTable td { border: 1px solid #ddd; padding: 6px 8px; font-size: 13px; }
+        table.fieldTable td.k { font-weight: bold; width: 220px; background: #fafafa; }
+        #replyBox { border-top: 1px solid #ddd; padding-top: 12px; margin-top: 16px; }
+        #replyBox textarea, #replyBox input { width: 100%; box-sizing: border-box; padding: 6px; margin: 4px 0; }
+        .err { color: #c0392b; margin: 8px 0; }
+        .hint { color: #777; font-size: 13px; }
+        button.primary { background: #2c6bd6; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; }
+        button.secondary { background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 8px 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen">
+        <h2>CMS Mailbox</h2>
+        <div id="loginStep">
+            <input id="username" placeholder="Username" autocomplete="username" />
+            <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+            <button onclick="doLogin()">Log In</button>
+        </div>
+        <div id="mfaStep" style="display:none">
+            <p class="hint" id="mfaHint">Enter your authenticator code.</p>
+            <img id="mfaBarcode" style="display:none;max-width:100%" />
+            <input id="passcode" placeholder="6-digit code" autocomplete="one-time-code" />
+            <button onclick="doVerify2fa()">Verify</button>
+        </div>
+        <div class="err" id="loginError"></div>
+    </div>
+
+    <div id="appScreen">
+        <div id="topBar">
+            <strong>CMS Mailbox</strong>
+            <button class="secondary" onclick="logout()">Log Out</button>
+        </div>
+        <div id="layout">
+            <div id="inboxList"></div>
+            <div id="messagePane"><p class="hint">Select a message.</p></div>
+        </div>
+    </div>
+
+    <script>
+        var apiBase = "";
+        var token = sessionStorage.getItem("mbxToken") || "";
+        var pendingToken = "";
+        var currentMessageId = null;
+
+        function api(path, opts) {
+            opts = opts || {};
+            opts.headers = opts.headers || {};
+            if (token) opts.headers["Authorization"] = "Bearer " + token;
+            return fetch(apiBase + path, opts);
+        }
+
+        function doLogin() {
+            var u = document.getElementById("username").value;
+            var p = document.getElementById("password").value;
+            document.getElementById("loginError").innerText = "";
+            fetch(apiBase + "/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ Username: u, Password: p })
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (res.status === "mfa_required") {
+                        pendingToken = res.pendingToken;
+                        document.getElementById("loginStep").style.display = "none";
+                        document.getElementById("mfaStep").style.display = "block";
+                        if (res.barcodeUrl) {
+                            document.getElementById("mfaBarcode").src = res.barcodeUrl;
+                            document.getElementById("mfaBarcode").style.display = "block";
+                            document.getElementById("mfaHint").innerText = "Scan this QR code in your authenticator app, then enter the code it shows.";
+                        }
+                    } else if (res.status === "bad_login") {
+                        document.getElementById("loginError").innerText = "Incorrect username or password.";
+                    } else if (res.status === "bad_ip") {
+                        document.getElementById("loginError").innerText = "New location detected — check your email to validate this IP address, then try again.";
+                    } else {
+                        document.getElementById("loginError").innerText = "Login failed.";
+                    }
+                })
+                .catch(function () { document.getElementById("loginError").innerText = "Could not reach the server."; });
+        }
+
+        function doVerify2fa() {
+            var code = document.getElementById("passcode").value;
+            document.getElementById("loginError").innerText = "";
+            fetch(apiBase + "/auth/verify2fa", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ PendingToken: pendingToken, Passcode: code })
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (res.status === "ok") {
+                        token = res.token;
+                        sessionStorage.setItem("mbxToken", token);
+                        showApp();
+                    } else if (res.status === "invalid_passcode") {
+                        document.getElementById("loginError").innerText = "Incorrect code — try again.";
+                    } else {
+                        document.getElementById("loginError").innerText = "Session expired — log in again.";
+                        document.getElementById("mfaStep").style.display = "none";
+                        document.getElementById("loginStep").style.display = "block";
+                    }
+                })
+                .catch(function () { document.getElementById("loginError").innerText = "Could not reach the server."; });
+        }
+
+        function logout() {
+            sessionStorage.removeItem("mbxToken");
+            token = "";
+            document.getElementById("appScreen").style.display = "none";
+            document.getElementById("loginScreen").style.display = "block";
+            document.getElementById("mfaStep").style.display = "none";
+            document.getElementById("loginStep").style.display = "block";
+        }
+
+        function showApp() {
+            document.getElementById("loginScreen").style.display = "none";
+            document.getElementById("appScreen").style.display = "block";
+            loadInbox();
+
+            // Deep link from the share-notification email (?message=<id>) — open it
+            // once, then strip the query string so a page refresh doesn't re-trigger it.
+            var params = new URLSearchParams(window.location.search);
+            var deepLinkMessageId = params.get("message");
+            if (deepLinkMessageId) {
+                openMessage(parseInt(deepLinkMessageId));
+                window.history.replaceState({}, "", window.location.pathname);
+            }
+        }
+
+        function loadInbox() {
+            api("/inbox")
+                .then(function (r) {
+                    if (r.status === 401) { logout(); throw new Error("unauthorized"); }
+                    return r.text();
+                })
+                .then(function (txt) {
+                    var rows = JSON.parse(txt);
+                    var list = document.getElementById("inboxList");
+                    list.innerHTML = "";
+                    if (rows.length === 0) {
+                        list.innerHTML = "<p class='hint' style='padding:14px'>No messages.</p>";
+                        return;
+                    }
+                    rows.forEach(function (m) {
+                        var div = document.createElement("div");
+                        div.className = "msgRow" + (m.DTViewed ? "" : " unread");
+                        div.onclick = function () { openMessage(m.MessageID); };
+                        div.innerHTML = "<span class='subj'>" + escapeHtml(m.Subject) + "</span>" +
+                            "<span class='meta'>" + escapeHtml(m.FromName) + " (" + escapeHtml(m.FromCompany) + ") &middot; " +
+                            new Date(m.DTCreated).toLocaleString() + "</span>";
+                        list.appendChild(div);
+                    });
+                })
+                .catch(function (ex) { console.log("loadInbox failed", ex); });
+        }
+
+        function openMessage(messageId) {
+            currentMessageId = messageId;
+            api("/inbox/" + messageId)
+                .then(function (r) {
+                    if (!r.ok) throw new Error("not found");
+                    return r.json();
+                })
+                .then(function (res) {
+                    var msg = JSON.parse(res.message)[0];
+                    var items = JSON.parse(res.items);
+                    renderMessage(msg, items);
+                    loadInbox(); // refresh read/unread state
+                })
+                .catch(function () {
+                    document.getElementById("messagePane").innerHTML = "<p class='err'>Could not open this message.</p>";
+                });
+        }
+
+        function renderMessage(msg, items) {
+            var pane = document.getElementById("messagePane");
+            var html = "<h3>" + escapeHtml(msg.Subject) + "</h3>";
+            html += "<p class='hint'>From " + escapeHtml(msg.FromName) + " (" + escapeHtml(msg.FromCompany) + ") &middot; " + new Date(msg.DTCreated).toLocaleString() + "</p>";
+            html += "<p>" + escapeHtml(msg.Body || "").replace(/\n/g, "<br/>") + "</p>";
+            html += "<div id='itemsArea'></div>";
+            html += "<div id='replyBox'>" +
+                "<input id='replySubject' placeholder='Subject' value='Re: " + escapeHtml(msg.Subject) + "' />" +
+                "<textarea id='replyBody' placeholder='Message' rows='4'></textarea>" +
+                "<div class='err' id='replyError'></div>" +
+                "<button class='primary' onclick='sendReply()'>Send Reply</button> " +
+                "<button class='secondary' onclick='archiveCurrent()'>Archive</button>" +
+                "</div>";
+            pane.innerHTML = html;
+
+            var itemsArea = document.getElementById("itemsArea");
+            items.forEach(function (item) {
+                var card = document.createElement("div");
+                card.className = "itemCard";
+                if (item.ItemType === "IAFormRecord") {
+                    // Full CMSNEO field-edit/read-only parity, not a flat read-only
+                    // table — rendered by CMSNEO's own ported InteractiveForm.js
+                    // inside ia-viewer.html, running against this app's own gated
+                    // backend (IaViewerController). See that file's comments.
+                    card.innerHTML = "<strong>" + escapeHtml(item.ItemLabel || "Form Application Record") + "</strong>" +
+                        "<iframe src='ia-viewer.html?messageItemId=" + item.MessageItemID + "' " +
+                        "style='width:100%;height:700px;border:1px solid #ccc;margin-top:8px' " +
+                        "title='" + escapeHtml(item.ItemLabel || "Form Application Record") + "'></iframe>";
+                    itemsArea.appendChild(card);
+                } else {
+                    var btn = document.createElement("button");
+                    btn.innerText = "Download: " + (item.ItemLabel || item.ItemType);
+                    btn.onclick = function () { downloadItem(item.MessageItemID, item.ItemLabel); };
+                    card.appendChild(btn);
+                    itemsArea.appendChild(card);
+                }
+            });
+        }
+
+        function downloadItem(messageItemId, label) {
+            api("/item/" + messageItemId)
+                .then(function (r) {
+                    if (!r.ok) throw new Error("denied");
+                    return r.blob();
+                })
+                .then(function (blob) {
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement("a");
+                    a.href = url;
+                    a.download = label || "download";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                })
+                .catch(function () { alert("You no longer have access to this item."); });
+        }
+
+        function sendReply() {
+            var errDiv = document.getElementById("replyError");
+            var body = {
+                Subject: document.getElementById("replySubject").value,
+                Body: document.getElementById("replyBody").value
+            };
+            api("/inbox/" + currentMessageId + "/reply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+            })
+                .then(function (r) {
+                    if (!r.ok) throw new Error("failed");
+                    return r.text();
+                })
+                .then(function () {
+                    document.getElementById("replyBody").value = "";
+                    loadInbox();
+                    errDiv.innerText = "Reply sent.";
+                })
+                .catch(function () { errDiv.innerText = "Could not send reply."; });
+        }
+
+        function archiveCurrent() {
+            api("/inbox/" + currentMessageId + "/archive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ Archived: true })
+            }).then(function () { loadInbox(); });
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? "" : s)
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        if (token) { showApp(); }
+    </script>
+</body>
+</html>

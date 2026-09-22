@@ -2,7 +2,7 @@
 	MBX_* schema — CMSMailbox companion app.
 
 	Deliberately prefixed MBX_ to avoid any collision with the existing, unrelated
-	NEO_Mail*/NEO_Mailbox* internal messaging feature (NEO_GetMailbox, NEO_SendMail, etc.).
+	NEO_Mail/NEO_Mailbox* internal messaging feature (NEO_GetMailbox, NEO_SendMail, etc.).
 
 	Lives in the SAME database as Users/Companies/Groups/Teams/AccessTree — this app
 	does not get its own database. Run this against dev first.

@@ -19,6 +19,9 @@ namespace CMSMailbox
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllersWithViews();
+            // Used only by IaViewerController to proxy GetIAPDF/DownloadIA byte-serving
+            // requests through to CMSNEO itself — see DB.CmsUrl.
+            services.AddHttpClient();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -33,6 +36,7 @@ namespace CMSMailbox
             }
 
             app.UseHttpsRedirection();
+            app.UseDefaultFiles(); // serves wwwroot/index.html for "/" — must precede UseStaticFiles
             app.UseStaticFiles();
 
             app.UseRouting();

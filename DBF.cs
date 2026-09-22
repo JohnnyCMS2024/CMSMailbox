@@ -16,6 +16,7 @@ namespace CMSMailbox
         public static string Environment;
         public static string JWT_Key;
         public static string GmfaKey; // must match the corresponding CMS environment's value exactly
+        public static string CmsUrl; // base URL of the CMSNEO app for this environment — used only to proxy byte-serving routes (GetIAPDF/DownloadIA) that CMSMailbox doesn't reimplement
 
         public static DataTable GetDB(string sql, int UID, string strParams = "", bool errPass = false, string cs = "", string timeout = "10")
         {

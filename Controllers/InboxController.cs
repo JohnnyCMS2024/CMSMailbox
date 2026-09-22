@@ -53,10 +53,61 @@ namespace CMSMailbox.Controllers
                 "{\"messageId\":" + messageId + ",\"archived\":" + (req.Archived ? 1 : 0) + "}");
             return Ok();
         }
+
+        // Listing only — who this user is even allowed to reply to. This does NOT
+        // itself authorize anything; MBX_SendReply independently re-derives the
+        // allowed recipient set from the thread being replied to, so a forged/stale
+        // client-side list can't be used to reach someone who isn't a real participant.
+        [HttpGet("prior-senders")]
+        public IActionResult GetPriorSenders()
+        {
+            int uid = CurrentUID();
+            if (uid == 0) return Unauthorized();
+
+            var dat = DB.GetDB("exec MBX_GetPriorSenders @uid", uid);
+            return Ok(JsonConvert.SerializeObject(dat));
+        }
+
+        // CMSMailbox has no "new message" compose at all — every send here is a reply
+        // within an existing thread. Recipients are always derived server-side from
+        // the thread's own participants (see MBX_SendReply); there is no parameter for
+        // an arbitrary recipient list, by design, since that's what makes "recipients
+        // may only message prior senders" hold without a separate allowlist check.
+        // Attaching a Form Application (or any item) from CMSMailbox is not supported
+        // here either — composing/attaching only happens via CMSNEO's own share flow.
+        [HttpPost("{messageId:int}/reply")]
+        public IActionResult Reply(int messageId, [FromBody] ReplyRequest req)
+        {
+            int uid = CurrentUID();
+            if (uid == 0) return Unauthorized();
+
+            var dat = DB.GetDB("exec MBX_SendReply @uid, @replyToMessageId, @subject, @body", uid,
+                new Newtonsoft.Json.Linq.JObject
+                {
+                    ["replyToMessageId"] = messageId,
+                    ["subject"] = req.Subject ?? "",
+                    ["body"] = req.Body ?? ""
+                }.ToString());
+
+            if (dat.Rows.Count == 0 || dat.Columns.Contains("err"))
+            {
+                // Same response whether the thread doesn't exist or uid isn't a
+                // participant of it — MBX_SendReply's own guard returns no rows either way.
+                return BadRequest();
+            }
+
+            return Ok(JsonConvert.SerializeObject(dat));
+        }
     }
 
     public class ArchiveRequest
     {
         public bool Archived { get; set; }
+    }
+
+    public class ReplyRequest
+    {
+        public string Subject { get; set; }
+        public string Body { get; set; }
     }
 }

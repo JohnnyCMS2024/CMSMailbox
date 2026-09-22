@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
 
 namespace CMSMailbox.Controllers
 {
@@ -24,7 +25,7 @@ namespace CMSMailbox.Controllers
 
             // Gate 1: this item must belong to a message this UID actually received.
             var lookup = DB.GetDB(
-                "select mi.ItemType, mi.ItemID from MBX_MessageItem mi " +
+                "select mi.ItemType, mi.ItemID, mi.FormID from MBX_MessageItem mi " +
                 "join MBX_Recipient r on r.MessageID = mi.MessageID and r.ToUID = @uid " +
                 "where mi.MessageItemID = @messageItemId",
                 uid, "{\"messageItemId\":" + messageItemId + "}");
@@ -37,6 +38,16 @@ namespace CMSMailbox.Controllers
 
             string itemType = lookup.Rows[0]["ItemType"].ToString();
             string itemId = lookup.Rows[0]["ItemID"].ToString();
+
+            if (itemType == "IAFormRecord")
+            {
+                // Superseded by the full port-by-copy IA viewer — see IaViewerController
+                // (item/{id}/bootstrap + main/adHoc) and wwwroot/ia-viewer.html, which
+                // render this with CMSNEO's own InteractiveForm.js instead of a flat
+                // JSON bundle. The client opens that page directly for this item type
+                // rather than calling this endpoint.
+                return NotFound();
+            }
 
             // Gate 2: re-verify against CMSNEO's OWN access rules for this item type,
             // right now, using the recipient's own uid.
@@ -59,8 +70,8 @@ namespace CMSMailbox.Controllers
                     dat = DB.GetDB("exec NEO_MGTGetDoc @uid, @fid", uid, "{\"fid\":" + itemId + "}");
                     break;
                 default:
-                    // 'Application' and anything else not yet supported — see plan doc
-                    // Section 0 (ApplicationFileViewer access-control gap).
+                    // Old 'Application' type and anything else not yet supported — see
+                    // plan doc (ApplicationFileViewer access-control gap).
                     LogAccess(messageItemId, uid, "Denied", "unsupported item type: " + itemType);
                     return NotFound();
             }

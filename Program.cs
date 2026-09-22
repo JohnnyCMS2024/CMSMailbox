@@ -23,6 +23,7 @@ namespace CMSMailbox
             DB.Environment = config["AppSettings:Environment"];
             DB.JWT_Key = config["AppSettings:JwtSigningKey"];
             DB.GmfaKey = config["AppSettings:GmfaKey"]; // must match the corresponding CMS environment's value
+            DB.CmsUrl = config["AppSettings:CmsUrl"];
 
             CreateHostBuilder(args).Build().Run();
         }

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Secure Record Viewer</title>
+<link rel="stylesheet" href="css/site.css" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #mbxDeniedBanner { display:none; padding: 24px; font-family: sans-serif; color: #444; }
+</style>
+</head>
+<body>
+  <!--
+    Hosts CMSNEO's own IA record view/edit UI (InteractiveForm.js's ViewDisp()),
+    copied byte-for-byte into this app's wwwroot (see js/ in this folder) except two
+    small, documented adaptations. This page's only job is to stand up the handful of
+    globals that code expects to already exist (normally set up by CMS's own page
+    shell / GLOBALSTART()), point it at THIS app's own gated backend
+    (IaViewerController), and hand it a MainID/FormID to render.
+
+    Every server call this page's scripts make is independently re-verified against
+    the current recipient's own CMSNEO permissions on every request — see
+    IaViewerController.cs. Loading this page (or its scripts running at all) grants
+    no access by itself.
+  -->
+  <div id="mbxDeniedBanner">You no longer have access to this record, or it could not be loaded.</div>
+
+  <!-- Elements the ported scripts reference as bare globals (id -> window property) -->
+  <div id="PageContainer" style="position:relative;"></div>
+  <div id="dispReportOuter" style="display:none;"></div>
+  <div id="dispMain"></div>
+  <div id="loading" style="display:none;"></div>
+  <input type="hidden" id="csrfToken" value="mbx" />
+
+  <script src="js/jquery.min.js"></script>
+  <script src="js/bootstrap.bundle.min.js"></script>
+  <script src="js/FileViewer.js"></script>
+  <script src="js/ajax.js"></script>
+  <script src="js/Draggable.js"></script>
+  <script src="js/newOpts.js"></script>
+  <script src="js/gchartTables.js"></script>
+  <script src="js/global.js"></script>
+  <script src="js/InteractiveForm.js"></script>
+
+  <script>
+    (function () {
+      // Bridge this app's own login token into the name the ported ajax.js expects
+      // (sessionStorage is shared with the parent tab/page on this same origin, so
+      // this does not require re-authenticating — it just aliases the existing key).
+      var realToken = sessionStorage.getItem("mbxToken");
+      if (!realToken) {
+        document.getElementById("mbxDeniedBanner").style.display = "block";
+        document.getElementById("mbxDeniedBanner").textContent = "You must be logged in to view this record.";
+        return;
+      }
+      sessionStorage.setItem("UserToken", realToken);
+
+      var params = new URLSearchParams(window.location.search);
+      var messageItemId = parseInt(params.get("messageItemId"), 10);
+      if (!messageItemId) {
+        document.getElementById("mbxDeniedBanner").style.display = "block";
+        return;
+      }
+
+      // Read by the patched newFormData() in js/global.js — every main/adHoc call
+      // this viewer makes gets scoped to this specific shared item server-side.
+      window.MBX_CurrentMessageItemId = messageItemId;
+
+      fetch("item/" + messageItemId + "/bootstrap", {
+        headers: { "Authorization": "Bearer " + realToken }
+      }).then(function (r) {
+        if (!r.ok) throw new Error("bootstrap failed");
+        return r.json();
+      }).then(function (ctx) {
+        if (!ctx.ok) throw new Error("not ok");
+
+        myCID = ctx.myCID;
+        mgtCID = ctx.mgtCID;
+        isMGT = ctx.isMGT;
+        myUID = ctx.myUID;
+        currentFormID = ctx.formId;
+        ME = { Security: jparse(ctx.security) };
+
+        // Minimal stand-ins for the report/list-view state ViewDisp()/ViewDispGO
+        // normally read from (populated by the full report grid in CMS, which this
+        // standalone viewer never loads) — just enough that their MainID lookups
+        // don't throw. See InteractiveForm.js's ViewDisp()/ViewDispGO for the reads.
+        var seed = { MainID: ctx.mainId, Viewed: false, UnreadNotes: "", UnseenAttachments: "", Released_Date: "" };
+        jsNeo = { jsALL: [seed], jsFiltered: [JSON.parse(JSON.stringify(seed))] };
+        exportJS = [JSON.parse(JSON.stringify(seed))];
+
+        ViewDisp(ctx.mainId, ctx.formId);
+      }).catch(function (err) {
+        console.log("ia-viewer bootstrap error", err);
+        document.getElementById("mbxDeniedBanner").style.display = "block";
+      });
+    })();
+  </script>
+</body>
+</html>
