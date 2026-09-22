@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -37,7 +38,20 @@ namespace CMSMailbox
 
             app.UseHttpsRedirection();
             app.UseDefaultFiles(); // serves wwwroot/index.html for "/" — must precede UseStaticFiles
-            app.UseStaticFiles();
+
+            // wwwroot's HTML/JS/CSS (index.html, ia-viewer.html, the ported IA-viewer
+            // scripts) have no cache-busting query strings — asp-append-version is a
+            // Razor tag helper and does nothing on these plain static files. Without
+            // this, browsers can keep serving an old cached copy for a long time after
+            // a fresh deploy, which looks identical to a failed/stale deploy from the
+            // outside. Force revalidation on every request instead.
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                OnPrepareResponse = ctx =>
+                {
+                    ctx.Context.Response.Headers["Cache-Control"] = "no-cache, must-revalidate";
+                }
+            });
 
             app.UseRouting();
 
