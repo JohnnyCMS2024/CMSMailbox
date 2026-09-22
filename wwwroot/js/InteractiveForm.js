@@ -73,7 +73,6 @@ if (document.getElementById("iaInnerSidePanel"))
 
 
 const pgObserver = new ResizeObserver(entries => {
-    PageContainer.style.height = "calc(100% - 20px)";
     PageContainer.style.overflowY = "hidden";
 });
 var fc = document.getElementsByClassName("fittedContainer")[0];
@@ -2848,8 +2847,9 @@ function DeleteMultiAnswer(MainID, FDID, go) {
 function triggerForm(js, tw, cw) {
     //TRIGGER FORMS
     tw = (tw.replace("px", "") * 1) - 100;
-    getData(null, newFormData("_IAGetTriggeredRecord", { mainid: js.MainID }), function (vr) {
-        var triggeredID = jparse(vr)[0].MainID;
+    getData(null, newFormData("_IAGetTriggeredRecord", { mainid: js.MainID }), function(vr) {
+        console.log(vr);
+        var triggeredID = null; // jparse(vr)[0].MainID;
 
         if (triggeredID != null) {
             internalDispTriggered.style.display = "";

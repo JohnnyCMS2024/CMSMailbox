@@ -3,10 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <title>Secure Record Viewer</title>
-<link rel="stylesheet" href="css/site.css" />
+<link rel="stylesheet" href="css/site.css" asp-append-version="true" />
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; }
+  /* site.css sets body's background to CMS's page-chrome navy (rgb(31,41,67)),
+     meant to peek out around the nav/sidebar this standalone viewer doesn't have.
+     Override to white here only — the shared site.css file itself isn't touched. */
+  html, body { margin: 0; padding: 0; height: 100%; background-color: #fff; }
   #mbxDeniedBanner { display:none; padding: 24px; font-family: sans-serif; color: #444; }
+  #mbxLoadingBanner { padding: 24px; text-align: center; font-family: sans-serif; color: #444; }
 </style>
 </head>
 <body>
@@ -24,23 +28,29 @@
     no access by itself.
   -->
   <div id="mbxDeniedBanner">You no longer have access to this record, or it could not be loaded.</div>
+  <div id="mbxLoadingBanner"><img src="loading.gif" width="32" height="32" /><div>Please wait while the record is loading...</div></div>
 
-  <!-- Elements the ported scripts reference as bare globals (id -> window property) -->
+  <!--
+    PageContainer matches CMS's own InteractiveForm.cshtml structure (a single empty
+    shell div — site.css gives #PageContainer height:100%). dispMain/dispReportOuter
+    are NOT static siblings: CMS builds them dynamically INSIDE PageContainer via
+    iaStartMe() (InteractiveForm.js ~line 174), and this bootstrap script below does
+    the same (that function's other side effects — page-chrome nav elements this
+    viewer doesn't have — aren't relevant here, so it isn't called wholesale).
+  -->
   <div id="PageContainer" style="position:relative;"></div>
-  <div id="dispReportOuter" style="display:none;"></div>
-  <div id="dispMain"></div>
   <div id="loading" style="display:none;"></div>
   <input type="hidden" id="csrfToken" value="mbx" />
 
-  <script src="js/jquery.min.js"></script>
-  <script src="js/bootstrap.bundle.min.js"></script>
-  <script src="js/FileViewer.js"></script>
-  <script src="js/ajax.js"></script>
-  <script src="js/Draggable.js"></script>
-  <script src="js/newOpts.js"></script>
-  <script src="js/gchartTables.js"></script>
-  <script src="js/global.js"></script>
-  <script src="js/InteractiveForm.js"></script>
+  <script src="js/jquery.min.js" asp-append-version="true"></script>
+  <script src="js/bootstrap.bundle.min.js" asp-append-version="true"></script>
+  <script src="js/FileViewer.js" asp-append-version="true"></script>
+  <script src="js/ajax.js" asp-append-version="true"></script>
+  <script src="js/Draggable.js" asp-append-version="true"></script>
+  <script src="js/newOpts.js" asp-append-version="true"></script>
+  <script src="js/gchartTables.js" asp-append-version="true"></script>
+  <script src="js/global.js" asp-append-version="true"></script>
+  <script src="js/InteractiveForm.js" asp-append-version="true"></script>
 
   <script>
     (function () {
@@ -49,6 +59,7 @@
       // this does not require re-authenticating — it just aliases the existing key).
       var realToken = sessionStorage.getItem("mbxToken");
       if (!realToken) {
+        document.getElementById("mbxLoadingBanner").style.display = "none";
         document.getElementById("mbxDeniedBanner").style.display = "block";
         document.getElementById("mbxDeniedBanner").textContent = "You must be logged in to view this record.";
         return;
@@ -58,6 +69,7 @@
       var params = new URLSearchParams(window.location.search);
       var messageItemId = parseInt(params.get("messageItemId"), 10);
       if (!messageItemId) {
+        document.getElementById("mbxLoadingBanner").style.display = "none";
         document.getElementById("mbxDeniedBanner").style.display = "block";
         return;
       }
@@ -80,6 +92,16 @@
         myUID = ctx.myUID;
         currentFormID = ctx.formId;
         ME = { Security: jparse(ctx.security) };
+
+        // Build dispMain/dispReportOuter as CHILDREN of PageContainer — see the HTML
+        // comment above; this is the DOM-structure part of iaStartMe() this viewer
+        // needs, without that function's other page-chrome side effects.
+        PageContainer.innerHTML = "";
+        xsection(PageContainer, [
+            "div|id=dispMain",
+            "div|id=dispReportOuter|||div|id=dispReport"
+        ]);
+        dispReportOuter.style.visibility = "hidden";
 
         // Stand-in for the report/list-view state ViewDisp()/ViewDispGO normally read
         // from (populated by the full report grid in CMS, which this standalone
@@ -113,9 +135,11 @@
         jsNeo = { jsALL: [seed], jsFiltered: [JSON.parse(JSON.stringify(seed))] };
         exportJS = [JSON.parse(JSON.stringify(seed))];
 
+        document.getElementById("mbxLoadingBanner").style.display = "none";
         ViewDisp(ctx.mainId, ctx.formId);
       }).catch(function (err) {
         console.log("ia-viewer bootstrap error", err);
+        document.getElementById("mbxLoadingBanner").style.display = "none";
         document.getElementById("mbxDeniedBanner").style.display = "block";
       });
     })();
