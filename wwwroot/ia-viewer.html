@@ -81,16 +81,19 @@
         currentFormID = ctx.formId;
         ME = { Security: jparse(ctx.security) };
 
-        // Minimal stand-ins for the report/list-view state ViewDisp()/ViewDispGO
-        // normally read from (populated by the full report grid in CMS, which this
-        // standalone viewer never loads) — just enough that their MainID lookups
-        // don't throw. See InteractiveForm.js's ViewDisp()/ViewDispGO for the reads.
-        // FormID must be included and match what _IAGetFormData returns for this
-        // record — ViewDispGO's caller filters jsNeo.jsALL by BOTH MainID and FormID
-        // (InteractiveForm.js's ViewDisp(), ~line 1986) to build the "js" object it
-        // passes into ViewDispGO; an undefined FormID here makes that filter come up
-        // empty and ViewDispGO gets called with an undefined first argument.
-        var seed = { MainID: ctx.mainId, FormID: ctx.formId, Viewed: false, UnreadNotes: "", UnseenAttachments: "", Released_Date: "" };
+        // Stand-in for the report/list-view state ViewDisp()/ViewDispGO normally read
+        // from (populated by the full report grid in CMS, which this standalone
+        // viewer never loads). InteractiveForm.js's ViewDisp() (~line 1986) locates
+        // this row by filtering jsNeo.jsALL on BOTH MainID and FormID, and ViewDispGO
+        // then reads plenty of other fields off it too (Application_Type, Status,
+        // Open_Closed, hasDoc, CID, Locked, ...) — rather than guess at that field
+        // list, seed with the actual NEO_IAGetFormData row the bootstrap endpoint
+        // already fetched for its own Gate B check, so every field is really there.
+        var formRowArr = jparse(ctx.formRow);
+        var seed = formRowArr.length > 0 ? formRowArr[0] : { MainID: ctx.mainId, FormID: ctx.formId };
+        seed.Viewed = false;
+        seed.UnreadNotes = seed.UnreadNotes || "";
+        seed.UnseenAttachments = seed.UnseenAttachments || "";
         jsNeo = { jsALL: [seed], jsFiltered: [JSON.parse(JSON.stringify(seed))] };
         exportJS = [JSON.parse(JSON.stringify(seed))];
 

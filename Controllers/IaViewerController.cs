@@ -75,11 +75,22 @@ namespace CMSMailbox.Controllers
             var creds = DB.GetDB("exec NEO_GetMGTCID @uid", uid);
             var security = DB.GetDB("exec NEO_NewSecurity @uid", uid);
 
+            // ViewDispGO reads a lot of fields (Application_Type, Status, Open_Closed,
+            // hasDoc, etc.) off the "js" object InteractiveForm.js's ViewDisp() builds
+            // by matching jsNeo.jsALL — normally a report-grid row CMS's own list view
+            // loads first. This standalone viewer has no report grid, so it hands the
+            // client the real NEO_IAGetFormData row instead (already fetched once for
+            // Gate B) and seeds jsNeo.jsALL with THAT, so every field ViewDispGO might
+            // read is actually present rather than guessed at field-by-field.
+            var formRow = DB.GetDB("exec NEO_IAGetFormData @uid, @MainID, @FormID", uid,
+                "{\"MainID\":" + ctx.MainId + ",\"FormID\":\"" + ctx.FormId + "\"}");
+
             return Ok(new
             {
                 ok = true,
                 mainId = ctx.MainId,
                 formId = ctx.FormId,
+                formRow = JsonConvert.SerializeObject(formRow),
                 myCID = creds.Rows.Count > 0 ? creds.Rows[0]["MyCID"] : null,
                 mgtCID = creds.Rows.Count > 0 ? creds.Rows[0]["MgtCID"] : null,
                 isMGT = creds.Rows.Count > 0 && creds.Rows[0]["isMGT"] != DBNull.Value && Convert.ToInt32(creds.Rows[0]["isMGT"]) == 1,
