@@ -85,7 +85,12 @@
         // normally read from (populated by the full report grid in CMS, which this
         // standalone viewer never loads) — just enough that their MainID lookups
         // don't throw. See InteractiveForm.js's ViewDisp()/ViewDispGO for the reads.
-        var seed = { MainID: ctx.mainId, Viewed: false, UnreadNotes: "", UnseenAttachments: "", Released_Date: "" };
+        // FormID must be included and match what _IAGetFormData returns for this
+        // record — ViewDispGO's caller filters jsNeo.jsALL by BOTH MainID and FormID
+        // (InteractiveForm.js's ViewDisp(), ~line 1986) to build the "js" object it
+        // passes into ViewDispGO; an undefined FormID here makes that filter come up
+        // empty and ViewDispGO gets called with an undefined first argument.
+        var seed = { MainID: ctx.mainId, FormID: ctx.formId, Viewed: false, UnreadNotes: "", UnseenAttachments: "", Released_Date: "" };
         jsNeo = { jsALL: [seed], jsFiltered: [JSON.parse(JSON.stringify(seed))] };
         exportJS = [JSON.parse(JSON.stringify(seed))];
 
