@@ -75,22 +75,27 @@ namespace CMSMailbox.Controllers
             var creds = DB.GetDB("exec NEO_GetMGTCID @uid", uid);
             var security = DB.GetDB("exec NEO_NewSecurity @uid", uid);
 
-            // ViewDispGO reads a lot of fields (Application_Type, Status, Open_Closed,
-            // hasDoc, etc.) off the "js" object InteractiveForm.js's ViewDisp() builds
-            // by matching jsNeo.jsALL — normally a report-grid row CMS's own list view
-            // loads first. This standalone viewer has no report grid, so it hands the
-            // client the real NEO_IAGetFormData row instead (already fetched once for
-            // Gate B) and seeds jsNeo.jsALL with THAT, so every field ViewDispGO might
-            // read is actually present rather than guessed at field-by-field.
-            var formRow = DB.GetDB("exec NEO_IAGetFormData @uid, @MainID, @FormID", uid,
-                "{\"MainID\":" + ctx.MainId + ",\"FormID\":\"" + ctx.FormId + "\"}");
+            // ViewDispGO reads several fields (Application_Type, hasDoc, strMainID, its
+            // own echoed FormID, ...) off the "js" object InteractiveForm.js's ViewDisp()
+            // builds by matching jsNeo.jsALL against a report-grid row — normally loaded
+            // by CMS's own list view via NEO_IAGETALLDATA260903 before ViewDisp() ever
+            // runs. Those specific fields are NOT present in NEO_IAGetFormData's rows
+            // (confirmed against InteractiveForm.js's own "excludeFields" list, ~line
+            // 696, which pulls exactly this field set out of that report proc's pivoted
+            // "Values"/"ShortNames" rows). This standalone viewer has no report grid, so
+            // it calls the same report proc itself, scoped to just this one MainID
+            // (GETCACHE=0 so it can't rely on report state we never built), and hands
+            // the raw pivoted rows to the client to unpivot the same way ViewDisp()'s
+            // own report-loading code already does.
+            var reportRaw = DB.GetDB("exec NEO_IAGETALLDATA260903 @uid, @formid, @FilterID, @MainID, @GETCACHE", uid,
+                "{\"formid\":\"" + ctx.FormId + "\",\"FilterID\":0,\"MainID\":" + ctx.MainId + ",\"GETCACHE\":0}");
 
             return Ok(new
             {
                 ok = true,
                 mainId = ctx.MainId,
                 formId = ctx.FormId,
-                formRow = JsonConvert.SerializeObject(formRow),
+                reportRaw = JsonConvert.SerializeObject(reportRaw),
                 myCID = creds.Rows.Count > 0 ? creds.Rows[0]["MyCID"] : null,
                 mgtCID = creds.Rows.Count > 0 ? creds.Rows[0]["MgtCID"] : null,
                 isMGT = creds.Rows.Count > 0 && creds.Rows[0]["isMGT"] != DBNull.Value && Convert.ToInt32(creds.Rows[0]["isMGT"]) == 1,

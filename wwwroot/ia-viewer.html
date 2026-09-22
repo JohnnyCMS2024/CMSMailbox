@@ -85,12 +85,28 @@
         // from (populated by the full report grid in CMS, which this standalone
         // viewer never loads). InteractiveForm.js's ViewDisp() (~line 1986) locates
         // this row by filtering jsNeo.jsALL on BOTH MainID and FormID, and ViewDispGO
-        // then reads plenty of other fields off it too (Application_Type, Status,
-        // Open_Closed, hasDoc, CID, Locked, ...) — rather than guess at that field
-        // list, seed with the actual NEO_IAGetFormData row the bootstrap endpoint
-        // already fetched for its own Gate B check, so every field is really there.
-        var formRowArr = jparse(ctx.formRow);
-        var seed = formRowArr.length > 0 ? formRowArr[0] : { MainID: ctx.mainId, FormID: ctx.formId };
+        // reads several more fields off it (Application_Type, hasDoc, strMainID, its
+        // own echoed FormID, ...) that only exist in NEO_IAGETALLDATA260903's pivoted
+        // report rows, not in NEO_IAGetFormData. This unpivots that report proc's raw
+        // rows the exact same way InteractiveForm.js's own report-loading code does
+        // (~line 674-736: a "ShortNames" row maps column keys — Col-prefixed keys are
+        // aliases — onto a single "Values" row) rather than guessing at the field list.
+        var reportRows = jparse(ctx.reportRaw);
+        var shortNames = reportRows.filter(function (d) { return d.RecordType == "ShortNames"; })[0];
+        var valuesRow = reportRows.filter(function (d) { return d.RecordType == "Values" && d.MainID == ctx.mainId; })[0] ||
+            reportRows.filter(function (d) { return d.RecordType == "Values"; })[0];
+
+        var seed = { MainID: ctx.mainId, FormID: ctx.formId };
+        if (shortNames && valuesRow) {
+            for (var key in shortNames) {
+                if (key.indexOf("Col") !== 0) seed[key] = valuesRow[key];
+            }
+            for (var key in shortNames) {
+                if (key.indexOf("Col") === 0 && shortNames[key] != null) {
+                    seed[shortNames[key]] = valuesRow[key];
+                }
+            }
+        }
         seed.Viewed = false;
         seed.UnreadNotes = seed.UnreadNotes || "";
         seed.UnseenAttachments = seed.UnseenAttachments || "";
