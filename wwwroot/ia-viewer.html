@@ -42,6 +42,23 @@
   <div id="loading" style="display:none;"></div>
   <input type="hidden" id="csrfToken" value="mbx" />
 
+  <!--
+    The rest of these are static page-chrome elements CMS's own _Layout.cshtml and
+    InteractiveForm.cshtml always have present, that global.js's dialog/popup helpers
+    (xconfirm, smconfirm, PopUp, extra, ...) reference as bare globals without ever
+    creating them first — they assume the surrounding page shell already put them
+    there. Found the hard way: xconfirm() threw "confirmWindow is not defined" from
+    Save/View PDF, both of which route through it. Adding the full known set up front
+    instead of chasing these one at a time.
+  -->
+  <div class="confirmWindow" id="confirmWindow" style="z-index:2700; display:none"></div>
+  <div id="confirmWindow2" class="confirmWindow" style="display:none"></div>
+  <div id="extras" style="z-index:2700; display:none"></div>
+  <div class="optWindow" id="optWindow" style="z-index:2500; display:none"></div>
+  <div id="popoutWindow" style="z-index:2500; display:none"></div>
+  <input type="file" id="bulkUploadFile" style="position:absolute; z-index:2500; display:none" />
+  <input type="file" id="bulkUploadAttachments" style="position:absolute; z-index:2500; display:none" multiple />
+
   <script src="js/jquery.min.js" asp-append-version="true"></script>
   <script src="js/bootstrap.bundle.min.js" asp-append-version="true"></script>
   <script src="js/FileViewer.js" asp-append-version="true"></script>

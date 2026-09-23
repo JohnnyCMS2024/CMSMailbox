@@ -429,11 +429,20 @@ function ViewIAFile(fid, filename) {
 
                 var iframeLoading = "iframeLoading_" + fid.replace(/-/g, "");
 
+                // CMSMailbox adaptation: DownloadIA has no messageItemId of its own to
+                // gate on (this is built directly, not via newFormData()), so append
+                // it explicitly — the server re-derives which record this fid should
+                // belong to from it before proxying to CMSNEO. Also added &token~ to
+                // the Download link below, which CMS's own copy omits — CMSMailbox has
+                // no session-based fallback auth for a plain window.open(), so it needs
+                // the one-off token to authenticate at all.
+                var mbxCtx = (typeof MBX_CurrentMessageItemId !== "undefined" && MBX_CurrentMessageItemId) ? "&messageItemId~" + MBX_CurrentMessageItemId : "";
+
                 section("fileIAViewer_" + fid + "_inner", [
-                    //((fid > 0) ? 
+                    //((fid > 0) ?
                     "img|id=" + iframeLoading + "|src=loading.gif|style=cursor:pointer;position:absolute;top:40%;left:40%|title=Click to remove loading image|onclick=iframeLoading_" + fid + ".style.display~\"none\"|",// :
                     //"div|class=sm|id=iframeLoading_" + fid + "|Please wait while data is loading ..."),
-                    "iframe|id=iframe_" + fid + "|title=" + filename + "|src=DownloadIA?fid~" + fid + "&dl~0&token~" + tmpToken + 
+                    "iframe|id=iframe_" + fid + "|title=" + filename + "|src=DownloadIA?fid~" + fid + "&dl~0&token~" + tmpToken + mbxCtx +
                     "|style=background-color:white;width:100%;height:100%; overflow:auto" +
                     "|onload=" + iframeLoading + ".style.display~\"none\""
                 ]);
@@ -442,7 +451,7 @@ function ViewIAFile(fid, filename) {
                 section("fileIAViewer_" + fid + "_hdr", [
                     "label|class=blueButton|style=float:right|onclick=closeFileIAViewer('" + fid + "')|Close",
                     "label|style=float:right; width:10px;|",
-                    "label|class=blueButton|style=float:right|onclick=windowOpen('DownloadIA?fid~" + fid + "&dl~1')|Download",
+                    "label|class=blueButton|style=float:right|onclick=windowOpen('DownloadIA?fid~" + fid + "&dl~1&token~" + tmpToken + mbxCtx + "')|Download",
                     "label|style=float:right;width:10px|",
                     "label|class=blueButton|style=float:right|onclick=xpopout('FILE VIEWER', {fid:'" + fid + "', filename:'" + filename + "', title:'" + filename + "', url:'DownloadIA?fid', type:'ia'})|PopOut",
                 ]);

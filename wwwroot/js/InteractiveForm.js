@@ -2378,6 +2378,7 @@ function ViewDispGO(js, jsVals, JoinedID, JoinedTitle, jsMgtData, jsMultiAnswers
     } else {
         if (EditOnOff && unlocked) {
             isReleased = (js.Released_Date != "") ? 1 : 0;
+            var canRelease = ME.Security.filter(d => d.FormID == currentFormID)[0].RlsFormApplications;
             xsection(dispButtons, [
                 //"button|class=blueButton|onclick=PrintRecord(" + js.MainID + ")|Print",
                 //"label|class=padLeft10",
@@ -2389,8 +2390,8 @@ function ViewDispGO(js, jsVals, JoinedID, JoinedTitle, jsMgtData, jsMultiAnswers
                 ((js.MainID == 0) ? "" : (!isReleased) ? "" : (!isMGT) ? "" : "button|name=btnSave|class=blueButton btnIASave|onclick=LockRecord(" + js.MainID + ")|Save & Lock"),
                 ((js.MainID == 0) ? "" : (!isReleased) ? "" : "label|class=padLeft10"),
 
-                ((js.MainID == 0) ? "" : (isReleased == 1) ? "" : (!ME.Security[0].RlsFormApplications) ? "" : "button|name=btnSave|class=btnIASave longblueButton|style=width:100px|onclick=SubmitRecord(" + js.MainID + ", 1)|Save for Use"),
-                ((js.MainID == 0) ? "" : (isReleased == 1) ? "" : (ME.Security[0].RlsFormApplications) ? "" : "button|disabled=true|title=You do not have permission to release this application|class=longblueButton|style=width:100px|Save for Use"),
+                ((js.MainID == 0) ? "" : (isReleased == 1) ? "" : (!canRelease) ? "" : "button|name=btnSave|class=btnIASave longblueButton|style=width:100px|onclick=SubmitRecord(" + js.MainID + ", 1)|Save for Use"),
+                ((js.MainID == 0) ? "" : (isReleased == 1) ? "" : (canRelease) ? "" : "button|disabled=true|title=You do not have permission to release this application|class=longblueButton|style=width:100px|Save for Use"),
                 ((js.MainID != 0) ? "label|class=padLeft10" : ""),
 
                 //code:20241108:jk:clone record
@@ -4128,6 +4129,13 @@ function SubmitRecord(mainid, released) {
             var data = new FormData();
             data.append("strJson", jstring(upl));
             data.append("type", recordid);
+            // CMSMailbox adaptation: this call is built directly (not via
+            // newFormData(), whose patched copy in global.js already injects this),
+            // so add it explicitly — the server re-derives MainID/FormID from it and
+            // gates this staging call the same as every other action.
+            if (typeof MBX_CurrentMessageItemId !== "undefined" && MBX_CurrentMessageItemId) {
+                data.append("messageItemId", MBX_CurrentMessageItemId);
+            }
             console.log("0000", "_IASubmitDataByGen300", { formid: currentSaveFormVals.FormID, recordid: recordid, released: released });
             console.log(data);
             getData("LoadGeneric300", data, function (vr) {

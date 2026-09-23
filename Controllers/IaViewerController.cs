@@ -42,7 +42,7 @@ namespace CMSMailbox.Controllers
             "_IAGetFormData", "_IAGetJoinRecord", "_IAGetFieldMGTData", "_IAGetMultiAnswers",
             "_IAGetDataBlanks", "_IAGetSetAprovalBy", "_IAGetFilesNotes", "_IAGetAddtlInfo",
             "_IAGetCIDs", "_IAGetAddtlInfoEmails", "_GetCleanFilename", "_GetUserToken",
-            "_IAGetDataByMainID"
+            "_IAGetDataByMainID", "_GetGUIDs"
         };
 
         // Write actions — unblocked 2026-09-22 once every one of these procs' own
@@ -178,7 +178,7 @@ namespace CMSMailbox.Controllers
             string freshToken = (mint.Rows.Count > 0 && mint.Columns.Contains("Token")) ? mint.Rows[0]["Token"].ToString() : null;
             if (string.IsNullOrEmpty(freshToken)) return NotFound();
 
-            var client = _httpClientFactory.CreateClient();
+            var client = _httpClientFactory.CreateClient("CmsProxy");
             string url = DB.CmsUrl.TrimEnd('/') + "/GetIAPDF?MainID=" + MainID +
                 "&filename=" + Uri.EscapeDataString(filename ?? "") +
                 "&token=" + Uri.EscapeDataString(freshToken);
@@ -191,6 +191,89 @@ namespace CMSMailbox.Controllers
 
             var bytes = await resp.Content.ReadAsByteArrayAsync();
             return File(bytes, "application/pdf");
+        }
+
+        // Proxies CMSNEO's own attachment viewer/download route the same way
+        // GetIAPDF proxies the PDF export. Unlike MainID, an attachment's fid has no
+        // natural-key lookup into MBX_MessageItem, so this is gated by messageItemId
+        // instead (added explicitly by the ported FileViewer.js — see that file) —
+        // proves the recipient currently has SOME gated-open IAFormRecord item, the
+        // same trust boundary GetIAPDF relies on for its own one-off token mint.
+        [HttpGet("DownloadIA")]
+        public async Task<IActionResult> DownloadIA(string fid, int dl, string token, int messageItemId)
+        {
+            int uid = ResolveOneOffUid(token);
+            if (uid == 0) return NotFound();
+
+            var ctx = ResolveAndGateByMessageItem(messageItemId, uid);
+            if (ctx == null) return NotFound();
+
+            if (string.IsNullOrEmpty(DB.CmsUrl)) return NotFound();
+
+            var mint = DB.GetDB("exec NEO_GetUserToken @uid", uid);
+            string freshToken = (mint.Rows.Count > 0 && mint.Columns.Contains("Token")) ? mint.Rows[0]["Token"].ToString() : null;
+            if (string.IsNullOrEmpty(freshToken)) return NotFound();
+
+            var client = _httpClientFactory.CreateClient("CmsProxy");
+            string url = DB.CmsUrl.TrimEnd('/') + "/DownloadIA?fid=" + Uri.EscapeDataString(fid ?? "") +
+                "&dl=" + dl + "&token=" + Uri.EscapeDataString(freshToken);
+
+            HttpResponseMessage resp;
+            try { resp = await client.GetAsync(url); }
+            catch { return NotFound(); }
+
+            if (!resp.IsSuccessStatusCode) return NotFound();
+
+            var bytes = await resp.Content.ReadAsByteArrayAsync();
+            string contentType = resp.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+            return File(bytes, contentType);
+        }
+
+        // The ported SubmitRecord()'s save flow stages field changes into
+        // NEO_GetGeneric300 via this endpoint BEFORE calling _IASubmitDataByGen300_2
+        // through the gated main/adHoc dispatcher above — CMS's own HomeController.cs
+        // has an identical LoadGeneric300 action (~line 5600) that this replicates.
+        // This call is built directly (`new FormData()`, not newFormData()) by the
+        // ported InteractiveForm.js, so it carries messageItemId via a small,
+        // documented patch to that file rather than the shared helper.
+        //
+        // Staging alone doesn't write anything to the real record — that only
+        // happens when _IASubmitDataByGen300_2 reads this back by (@uid, @type) and
+        // applies NEOGen3AuthorizedFields' own per-CID field filter (the user's own
+        // fix, see plan doc Section 7.2). Still gated the same as every other action
+        // here, consistent with "cheap insurance even where the real check is
+        // downstream."
+        [HttpPost("LoadGeneric300")]
+        public IActionResult LoadGeneric300(string strJson, string type, int messageItemId)
+        {
+            int uid = CurrentUID();
+            if (uid == 0) return Content("[]");
+
+            var ctx = ResolveAndGateByMessageItem(messageItemId, uid);
+            if (ctx == null) return Content("[]");
+
+            if (string.IsNullOrEmpty(strJson)) return Content("[]");
+            var arr = JArray.Parse(strJson);
+            if (arr.Count == 0) return Content("[]");
+
+            var first = (JObject)arr[0];
+            var hdrs = first.Properties().Select(p => p.Name.Replace("|", "").Replace("~", "")).ToList();
+            var rows = new List<string> { string.Join("|", hdrs) };
+            foreach (var item in arr)
+            {
+                var jo = (JObject)item;
+                var cols = hdrs.Select(h => (jo[h]?.ToString() ?? "").Replace("|", "").Replace("~", ""));
+                rows.Add(string.Join("|", cols));
+            }
+
+            var dat = DB.GetDB("exec NEO_GetGeneric300 @uid, @rows, @type", uid,
+                JsonConvert.SerializeObject(new JObject
+                {
+                    ["rows"] = string.Join("~", rows),
+                    ["type"] = type ?? ""
+                }));
+
+            return Content(JsonConvert.SerializeObject(dat), "application/json");
         }
 
         private class ItemContext { public int MainId; public string FormId; }
