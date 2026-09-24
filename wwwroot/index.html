@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <title>CMS Mailbox</title>
     <style>
+        /* #appScreen is a fixed 100vh shell with its own internal scroll areas
+           (#inboxList, #messagePane) — without this, the outer body ALSO scrolls
+           whenever its rendered height exceeds the viewport by even a pixel,
+           producing two visible scrollbars instead of one. */
+        html, body { height: 100%; overflow: hidden; }
         body { font-family: Segoe UI, Arial, sans-serif; margin: 0; background: #f4f6f8; color: #222; }
         #loginScreen { max-width: 360px; margin: 80px auto; background: #fff; padding: 24px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         #loginScreen input { width: 100%; padding: 8px; margin: 6px 0 14px; box-sizing: border-box; }
@@ -17,13 +22,21 @@
         .msgRow.unread { font-weight: bold; }
         .msgRow .subj { display: block; }
         .msgRow .meta { font-size: 12px; color: #777; font-weight: normal; }
-        #messagePane { flex: 1; padding: 20px; overflow-y: auto; }
+        /* #messagePane is a column: #messageScroll sizes to its own content
+           (subject/from/body/the record) and only shrinks — never grows to fill
+           leftover space — so short content sits naturally above #replyBox with no
+           gap. When content is taller than the available height, #messageScroll
+           shrinks to what's left and scrolls internally instead, keeping #replyBox
+           fully visible below it either way. */
+        #messagePane { flex: 1; display: flex; flex-direction: column; height: 100%; min-width: 0; }
+        #messageScroll { flex: 0 1 auto; min-height: 0; padding: 20px; overflow-y: auto; }
+        #replyBox { flex-shrink: 0; padding: 12px 20px; background: #fff; }
         .itemCard { border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin: 8px 0; background: #fff; }
         .itemCard button { padding: 6px 12px; }
         table.fieldTable { border-collapse: collapse; width: 100%; margin-top: 8px; }
         table.fieldTable td { border: 1px solid #ddd; padding: 6px 8px; font-size: 13px; }
         table.fieldTable td.k { font-weight: bold; width: 220px; background: #fafafa; }
-        #replyBox { border-top: 1px solid #ddd; padding-top: 12px; margin-top: 16px; }
+        #replyBox { border-top: 1px solid #ddd; }
         #replyBox textarea, #replyBox input { width: 100%; box-sizing: border-box; padding: 6px; margin: 4px 0; }
         .err { color: #c0392b; margin: 8px 0; }
         .hint { color: #777; font-size: 13px; }
@@ -40,6 +53,7 @@
             <input id="password" type="password" placeholder="Password" autocomplete="current-password" onkeyup="if (event.key === 'Enter') doLogin()" />
             <button onclick="doLogin()">Log In</button>
         </div>
+        <div id="loginLoadingBanner" style="display:none;text-align:center;padding:12px"><img src="loading.gif" width="32" height="32" /></div>
         <div id="mfaStep" style="display:none">
             <p class="hint" id="mfaHint">Enter your authenticator code.</p>
             <img id="mfaBarcode" style="display:none;max-width:100%" />
@@ -77,6 +91,7 @@
             var u = document.getElementById("username").value;
             var p = document.getElementById("password").value;
             document.getElementById("loginError").innerText = "";
+            document.getElementById("loginLoadingBanner").style.display = "block";
             fetch(apiBase + "/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -84,8 +99,10 @@
             })
                 .then(function (r) { return r.json(); })
                 .then(function (res) {
+                    document.getElementById("loginLoadingBanner").style.display = "none";
                     if (res.status === "mfa_required") {
                         pendingToken = res.pendingToken;
+                        document.getElementById("passcode").value = "";
                         document.getElementById("loginStep").style.display = "none";
                         document.getElementById("mfaStep").style.display = "block";
                         if (res.barcodeUrl) {
@@ -101,7 +118,10 @@
                         document.getElementById("loginError").innerText = "Login failed.";
                     }
                 })
-                .catch(function () { document.getElementById("loginError").innerText = "Could not reach the server."; });
+                .catch(function () {
+                    document.getElementById("loginLoadingBanner").style.display = "none";
+                    document.getElementById("loginError").innerText = "Could not reach the server.";
+                });
         }
 
         function doVerify2fa() {
@@ -136,6 +156,7 @@
             document.getElementById("loginScreen").style.display = "block";
             document.getElementById("mfaStep").style.display = "none";
             document.getElementById("loginStep").style.display = "block";
+            document.getElementById("passcode").value = "";
         }
 
         function showApp() {
@@ -200,10 +221,14 @@
 
         function renderMessage(msg, items) {
             var pane = document.getElementById("messagePane");
-            var html = "<h3>" + escapeHtml(msg.Subject) + "</h3>";
+            var html = "<div id='messageScroll'>";
+            html += "<h3>" + escapeHtml(msg.Subject) + "</h3>";
             html += "<p class='hint'>From " + escapeHtml(msg.FromName) + " (" + escapeHtml(msg.FromCompany) + ") &middot; " + new Date(msg.DTCreated).toLocaleString() + "</p>";
             html += "<p>" + escapeHtml(msg.Body || "").replace(/\n/g, "<br/>") + "</p>";
             html += "<div id='itemsArea'></div>";
+            html += "</div>";
+            // Deliberately OUTSIDE #messageScroll, as a fixed sibling — see the
+            // #replyBox/#messageScroll CSS comment above.
             html += "<div id='replyBox'>" +
                 "<input id='replySubject' placeholder='Subject' value='Re: " + escapeHtml(msg.Subject) + "' />" +
                 "<textarea id='replyBody' placeholder='Message' rows='4'></textarea>" +
@@ -222,9 +247,15 @@
                     // table — rendered by CMSNEO's own ported InteractiveForm.js
                     // inside ia-viewer.html, running against this app's own gated
                     // backend (IaViewerController). See that file's comments.
+                    // Bounded height, with ia-viewer.html's own body scrolling
+                    // internally once content exceeds it (see that file's CSS
+                    // comments — overflow/scrolling set from here on the <iframe>
+                    // tag itself doesn't reliably control an embedded document's
+                    // scrollability) — so a long record scrolls within itself
+                    // instead of pushing #replyBox down/out of view.
                     card.innerHTML = "<strong>" + escapeHtml(item.ItemLabel || "Form Application Record") + "</strong>" +
                         "<iframe src='ia-viewer.html?messageItemId=" + item.MessageItemID + "' " +
-                        "style='width:100%;height:700px;border:1px solid #ccc;margin-top:8px' " +
+                        "style='width:100%;height:450px;border:1px solid #ccc;margin-top:8px;display:block' " +
                         "title='" + escapeHtml(item.ItemLabel || "Form Application Record") + "'></iframe>";
                     itemsArea.appendChild(card);
                 } else {

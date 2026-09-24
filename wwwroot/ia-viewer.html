@@ -8,9 +8,31 @@
   /* site.css sets body's background to CMS's page-chrome navy (rgb(31,41,67)),
      meant to peek out around the nav/sidebar this standalone viewer doesn't have.
      Override to white here only — the shared site.css file itself isn't touched. */
-  html, body { margin: 0; padding: 0; height: 100%; background-color: #fff; }
+  html, body { margin: 0; padding: 0; background-color: #fff; }
   #mbxDeniedBanner { display:none; padding: 24px; font-family: sans-serif; color: #444; }
   #mbxLoadingBanner { padding: 24px; text-align: center; font-family: sans-serif; color: #444; }
+  /* index.html embeds this page in a FIXED-height iframe with its own scrollbar —
+     but CSS/attributes set from the PARENT page (overflow, scrolling="auto") don't
+     reliably control an embedded document's scrollability in practice. The robust
+     way is to make THIS document's own body the scroll container instead: it fills
+     the iframe's viewport (height:100%) and scrolls internally once content
+     exceeds that. #PageContainer/#ViewDispute must NOT also scroll internally, or
+     content just gets clipped instead of scrolled — ViewDispGO's own inline style
+     on #ViewDispute (height: document.body.clientHeight - 200) is also
+     meaningless here (this page has no other chrome, so clientHeight is ~0 at
+     that point, producing a negative/invalid height) and is overridden below. */
+  html, body { height: 100%; overflow-y: auto; }
+  #PageContainer { height: auto !important; overflow-y: visible !important; }
+  #ViewDispute { height: auto !important; overflow-y: visible !important; }
+  /* site.css's .fileViewer (the attachment/PDF popup) is "position:absolute;
+     top:50px;left:100px" relative to PageContainer's own top edge — fine on a
+     normal CMS page, but PageContainer here can be much taller than the iframe's
+     own viewport (see the body-scroll comment above), so a popup opened after
+     scrolling down to Attachments/Notes renders near the very top of the whole
+     document, off-screen above the current scroll position. Fixed positioning
+     anchors it to the iframe's own viewport instead, wherever the user actually
+     is. Scoped to this page only — not touching the shared site.css class. */
+  .fileViewer { position: fixed !important; }
 </style>
 </head>
 <body>

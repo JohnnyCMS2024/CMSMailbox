@@ -28,6 +28,18 @@
         overflow-y: hidden;
     }
 
+/* Standardizes every loading.gif spinner across the app to one small,
+   consistent size — the plain <img src="loading.gif"> tags scattered across
+   the codebase have no consistent sizing of their own, so this overrides them
+   all from one place rather than editing each call site. The real file is
+   160x20 (an 8:1 wide strip of round dots); squishing it into a roughly square
+   box like this distorts the dots into a chevron/arrow look — deliberate,
+   the user prefers that look over the undistorted original. */
+img[src*="loading.gif" i] {
+    width: 32px !important;
+    height: 32px !important;
+}
+
 .sidePanelleftRight {
     padding-left: 5px;
     background-position: center;
