@@ -36,14 +36,14 @@
     <div id="loginScreen">
         <h2>CMS Mailbox</h2>
         <div id="loginStep">
-            <input id="username" placeholder="Username" autocomplete="username" />
-            <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+            <input id="username" placeholder="Username" autocomplete="username" onkeyup="if (event.key === 'Enter') doLogin()" />
+            <input id="password" type="password" placeholder="Password" autocomplete="current-password" onkeyup="if (event.key === 'Enter') doLogin()" />
             <button onclick="doLogin()">Log In</button>
         </div>
         <div id="mfaStep" style="display:none">
             <p class="hint" id="mfaHint">Enter your authenticator code.</p>
             <img id="mfaBarcode" style="display:none;max-width:100%" />
-            <input id="passcode" placeholder="6-digit code" autocomplete="one-time-code" />
+            <input id="passcode" placeholder="6-digit code" autocomplete="one-time-code" onkeyup="if (event.key === 'Enter') doVerify2fa()" />
             <button onclick="doVerify2fa()">Verify</button>
         </div>
         <div class="err" id="loginError"></div>

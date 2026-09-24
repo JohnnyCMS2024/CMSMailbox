@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -151,6 +153,77 @@ namespace CMSMailbox.Controllers
 
             LogAccess(messageItemId, uid, "Served", action);
             return Content(JsonConvert.SerializeObject(dat), "application/json");
+        }
+
+        // Mirrors CMS's own main/adHocAttach (HomeController.cs ~line 2496) for
+        // file-uploading actions — a separate endpoint from main/adHoc because
+        // DB.GetDB can't bind binary data (it JSON-round-trips every parameter
+        // through .ToString()), so this builds its own SqlDataAdapter call the same
+        // way CMS's adhocAttachFile() does. Restricted to _IALoadFiles only — a
+        // strict allowlist of one, unlike CMS's fully generic version, consistent
+        // with main/adHoc's own philosophy. Gated the same as every other action:
+        // messageItemId is already carried automatically here since this call goes
+        // through the patched newFormData()/getData(), unlike LoadGeneric300 or the
+        // DownloadIA links, which needed an explicit client-side patch.
+        [HttpPost("main/adHocAttach")]
+        [DisableRequestSizeLimit]
+        public IActionResult AdHocAttach(string action, string strjson, string csrf, int messageItemId)
+        {
+            int uid = CurrentUID();
+            if (uid == 0) return Content("[]");
+
+            var ctx = ResolveAndGateByMessageItem(messageItemId, uid);
+            if (ctx == null) return Content("[]");
+
+            if (!string.Equals(action, "_IALoadFiles", StringComparison.OrdinalIgnoreCase))
+            {
+                LogAccess(messageItemId, uid, "Denied", "adHocAttach action not on allowlist: " + action);
+                return Content("[]");
+            }
+
+            var jo = string.IsNullOrEmpty(strjson) ? new JObject() : JObject.Parse(strjson);
+            string rtn = "[]";
+
+            if (Request.Form.Files.Count > 0)
+            {
+                foreach (var file in Request.Form.Files)
+                {
+                    byte[] filedata;
+                    using (var ms = new MemoryStream())
+                    {
+                        file.CopyTo(ms);
+                        filedata = ms.ToArray();
+                    }
+
+                    rtn = JsonConvert.SerializeObject(RunAttachSql(action, file.FileName, filedata, jo, uid));
+                }
+            }
+
+            LogAccess(messageItemId, uid, "Served", action);
+            return Content(rtn, "application/json");
+        }
+
+        // Positional-by-name the same way CMS's adhocAttachFile does: @filename and
+        // @filedata come right after @uid, then the rest of strjson's keys — SQL
+        // Server matches EXEC ... @paramName arguments to the proc's own declared
+        // parameter names, not call-site order, so this only works because the
+        // client's JSON keys already match NEO_IALoadFiles' real parameter names.
+        private DataTable RunAttachSql(string action, string filename, byte[] filedata, JObject jo, int uid)
+        {
+            var dat = new DataTable();
+            string strParams = "";
+            foreach (var key in jo) strParams += ", @" + key.Key;
+
+            string sql = "exec NEO" + action + " @uid, @filename, @filedata" + strParams;
+            var da = new SqlDataAdapter(sql, DB.ConnectionString);
+            da.SelectCommand.CommandTimeout = 180;
+            da.SelectCommand.Parameters.AddWithValue("@uid", uid);
+            da.SelectCommand.Parameters.AddWithValue("@filename", filename);
+            da.SelectCommand.Parameters.AddWithValue("@filedata", filedata);
+            foreach (var key in jo) da.SelectCommand.Parameters.AddWithValue("@" + key.Key, key.Value.ToString());
+
+            try { da.Fill(dat); } catch { /* best-effort, matches CMS's own adhocAttachFile */ }
+            return dat;
         }
 
         // Proxies CMSNEO's own PDF export rather than reimplementing GemBox/DocuSign

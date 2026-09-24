@@ -2241,6 +2241,21 @@ function SubmitShareToMailbox(MainID, FormID, Label) {
 }
 
 
+// Toggles the "Additional Actions" dropdown panel built by ViewDispGO (2026-09-24) —
+// closes on a second click of the button, or on an outside click.
+function toggleAdditionalActions() {
+    var panel = document.getElementById("additionalActionsPanel");
+    if (!panel) return;
+    panel.style.display = (panel.style.display === "none") ? "block" : "none";
+}
+document.addEventListener("click", function (ev) {
+    var wrap = document.getElementById("additionalActionsWrap");
+    if (wrap && !wrap.contains(ev.target)) {
+        var panel = document.getElementById("additionalActionsPanel");
+        if (panel) panel.style.display = "none";
+    }
+});
+
 var isReleased, displayMergeFields, displayFieldIDs;
 function ViewDispGO(js, jsVals, JoinedID, JoinedTitle, jsMgtData, jsMultiAnswers, sentfunc) {
     curRecord = jsVals;
@@ -2323,6 +2338,7 @@ function ViewDispGO(js, jsVals, JoinedID, JoinedTitle, jsMgtData, jsMultiAnswers
         "td|class=smhdr|MainID: " + ((cloneID != null) ? " [ New ] " : (js.MainID == 0) ? " [ NEW ] " : js.strMainID) +
         "|||append|label|id=IARecordStatus|style=font-size:10px; color:red|class=padLeft10|" + ((cloneID != null) ? "cloned from " + js.MainID : (js.Status != "") ? js.Status : " ") +
         "|||label|id=IARecordApproveDecline|class=padLeft10" +
+        "|||label|id=IARecordOpenClosed|class=sm padLeft10" +
         "|||label|id=dispButtons|class=padRight10|style=float:right; white-space:nowrap",
         ((SystemLinkFID) ? "div|id=dispSystemLink|Filename:|||label|class=alink padLeft10|onclick=reportLoadFiles(" + SystemLinkFID + ",'" + SystemLinkFilename + "','" + SystemLinkType + "')|Filename:" + SystemLinkFilename : "")
         
@@ -2371,6 +2387,12 @@ function ViewDispGO(js, jsVals, JoinedID, JoinedTitle, jsMgtData, jsMultiAnswers
     console.log(899, jsVals[0].MainCID, myCID);
     console.log(967, EditOnOff, unlocked, isReleased);
 
+    // Save & Lock, Clone, View PDF, and Set as Closed/Open move into a collapsible
+    // "Additional Actions" menu instead of the main button row (2026-09-24, ported
+    // from CMS's InteractiveForm.js), the same as CMS's own copy. Delete and Share to
+    // Mailbox are NOT added here — see the note below, unchanged from before.
+    var additionalActions = [];
+
     if (cloneID != null) {
         xsection(dispButtons, [
             "button|class=longblueButton btnIASave|onclick=SubmitRecord(" + js.MainID + ", false)|Save & Review"
@@ -2387,18 +2409,18 @@ function ViewDispGO(js, jsVals, JoinedID, JoinedTitle, jsMgtData, jsMultiAnswers
                     "button|name=btnSave|class=btnIASave blueButton|onclick=SubmitRecord(" + js.MainID + ", " + isReleased + ")|Save"),
                 "label|class=padLeft10",
 
-                ((js.MainID == 0) ? "" : (!isReleased) ? "" : (!isMGT) ? "" : "button|name=btnSave|class=blueButton btnIASave|onclick=LockRecord(" + js.MainID + ")|Save & Lock"),
-                ((js.MainID == 0) ? "" : (!isReleased) ? "" : "label|class=padLeft10"),
-
                 ((js.MainID == 0) ? "" : (isReleased == 1) ? "" : (!canRelease) ? "" : "button|name=btnSave|class=btnIASave longblueButton|style=width:100px|onclick=SubmitRecord(" + js.MainID + ", 1)|Save for Use"),
                 ((js.MainID == 0) ? "" : (isReleased == 1) ? "" : (canRelease) ? "" : "button|disabled=true|title=You do not have permission to release this application|class=longblueButton|style=width:100px|Save for Use"),
                 ((js.MainID != 0) ? "label|class=padLeft10" : ""),
-
-                //code:20241108:jk:clone record
-                ((js.MainID != 0 && jsVals[0].MainCID == myCID) ? "button|class=blueButton|onclick=ViewDisp(" + js.MainID + ", null, true)|Clone" : ""),
-                ((js.MainID != 0 && jsVals[0].MainCID == myCID) ? "label|class=padLeft10" : ""),
-
             ]);
+
+            if (js.MainID != 0 && isReleased && isMGT) {
+                additionalActions.push("button|class=longblueButton|style=width:100%;display:block;float:none;margin-bottom:6px|onclick=LockRecord(" + js.MainID + ")|Save & Lock");
+            }
+            //code:20241108:jk:clone record
+            if (js.MainID != 0 && jsVals[0].MainCID == myCID) {
+                additionalActions.push("button|class=longblueButton|style=width:100%;display:block;float:none;margin-bottom:6px|onclick=ViewDisp(" + js.MainID + ", null, true)|Clone");
+            }
         } else if (MGTEditOnOff && unlocked) {
             xsection(dispButtons, [
                 "button|name=btnSave|class=blueButton btnIASave|onclick=SubmitRecord(" + js.MainID + ", true)|Save",
@@ -2407,30 +2429,36 @@ function ViewDispGO(js, jsVals, JoinedID, JoinedTitle, jsMgtData, jsMultiAnswers
         } else if (!unlocked) {
             xsection(dispButtons, [
                 "label|class=red padRight10|Record Locked",
-                ((js.MainID != 0 && isMGT) ? "label|class=padLeft10" : ""),
-                ((js.MainID != 0 && jsVals[0].MainCID == myCID) ? "button|class=blueButton|onclick=ViewDisp(" + js.MainID + ", null, true)|Clone" : ""),
-                ((js.MainID != 0 && jsVals[0].MainCID == myCID) ? "label|class=padLeft10" : ""),
             ]);
+
+            if (js.MainID != 0 && jsVals[0].MainCID == myCID) {
+                additionalActions.push("button|class=longblueButton|style=width:100%;display:block;float:none;margin-bottom:6px|onclick=ViewDisp(" + js.MainID + ", null, true)|Clone");
+            }
         }
-        //alert(js.Open_Closed);
-        xsection(dispButtons, [
-            //((js.MainID != 0) ? "label|class=padLeft10" : ""),
-            ((js.MainID != 0) ? "button|class=blueButton|style=width:100px|onclick=IAViewPDF(" + js.MainID + ", '" + js.Application_Type.replace(/ /g, "_") + ".pdf', " + js.hasDoc + ")|View PDF" : ""),
-            ((js.MainID != 0) ? "label|class=padLeft10" : ""),
-            // ((js.MainID != 0 && !js.hasDoc) ? "button|class=blueButton|style=width:100px|onclick=ViewPDF(" + js.MainID + ", '" + js.Application_Type.replace(/ /g, "_") + ".pdf')|View PDF" : ""),
-            //((js.MainID != 0 && !js.hasDoc) ? "button|class=blueButton|style=width:100px|onclick=PopUp('View PDF', '" + js.Application_Type.replace(/ /g, "_") + ".pdf', null, true)|View PDF" : ""),//code: 20240815: 0412pm adding View PDF PopUp Button
-            //((js.MainID != 0 && !js.hasDoc) ? "label|class=padLeft10" : ""),////code: 20240815: 0412pm
-            ((js.MainID != 0) ? "button|class=longblueButton|style=width:100px|id=btnOpenClose|onclick=OpenCloseRecord(" + js.MainID + ", '" + js.Open_Closed + "')|" +
-                    ((js.Open_Closed == "CLOSED") ? "Set as Open" : "Set as Closed") : ""),
-            ((js.MainID != 0 && jsVals[0].MainCID == myCID) ? "label|class=padLeft10" : ""),
-            // CMSMailbox adaptation (port-by-copy from CMS's InteractiveForm.js):
-            // Delete and Share-to-Mailbox are both deliberately unavailable from
-            // within CMSMailbox — composing/attaching only ever happens in CMSNEO
-            // itself (see MailboxShareController), and record deletion is out of
-            // scope for a reply-only mailbox viewer. The server-side dispatcher
-            // also rejects both actions independently (not on its own allowlist),
-            // so this is a UX suppression, not the enforcement point.
-        ]);
+
+        if (js.MainID != 0) {
+            additionalActions.push("button|class=longblueButton|style=width:100%;display:block;float:none;margin-bottom:6px|onclick=IAViewPDF(" + js.MainID + ", '" + js.Application_Type.replace(/ /g, "_") + ".pdf', " + js.hasDoc + ")|View PDF");
+            additionalActions.push("button|class=longblueButton|style=width:100%;display:block;float:none;margin-bottom:6px|id=btnOpenClose|onclick=OpenCloseRecord(" + js.MainID + ", '" + js.Open_Closed + "')|" +
+                ((js.Open_Closed == "CLOSED") ? "Set as Open" : "Set as Closed"));
+            IARecordOpenClosed.innerHTML = "Record: " + js.Open_Closed;
+        }
+
+        // CMSMailbox adaptation (port-by-copy from CMS's InteractiveForm.js):
+        // Delete and Share-to-Mailbox are both deliberately unavailable from
+        // within CMSMailbox — composing/attaching only ever happens in CMSNEO
+        // itself (see MailboxShareController), and record deletion is out of
+        // scope for a reply-only mailbox viewer. The server-side dispatcher
+        // also rejects both actions independently (not on its own allowlist),
+        // so this is a UX suppression, not the enforcement point.
+
+        if (additionalActions.length > 0) {
+            xsection(dispButtons, [
+                "div|id=additionalActionsWrap|style=position:relative;display:inline-block" +
+                "|||append|button|id=btnAdditionalActions|class=longblueButton|onclick=toggleAdditionalActions()|Additional Actions &#9662;" +
+                "|||append|div|id=additionalActionsPanel|style=display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#fff;border:1px solid #ccc;box-shadow:0 2px 8px rgba(0,0,0,0.2);padding:8px;z-index:500;white-space:nowrap;text-align:left;min-width:160px"
+            ]);
+            xsection(additionalActionsPanel, additionalActions.map(function (btn) { return btn + "|||br"; }));
+        }
     }
     OpenCloseRecord()
 
