@@ -2726,21 +2726,10 @@ function ViewDispGO(js, jsVals, JoinedID, JoinedTitle, jsMgtData, jsMultiAnswers
         "div|id=internalDispTriggered|class=singleDspTables|style=display:none", "br",
     ]);
 
-    if (AdminCID == myCID) {
-        xsection(ViewDispute, [
-            "div|id=dispMergeFields|class=singleDspTables|style=text-align:right|||" +
-            "label|class=padRight10|||append|" +
-            //"br|||" +
-            "label|icon=matrix.png|class=cursor padBottom10|onclick=GoIAMatrix('" + currentFormID + "')|Merge Field Matrix|||" +
-            "label|class=padLeft10|||" +
-            "label|class=padLeft10|||" +
-            "label|icon=excel.png|class=cursor|onclick=exportMergeFields(0)|Merge Fields|||" +
-            "label|class=padLeft10|||" +
-            "label|class=padLeft10|||" +
-            "label|icon=excel.png|class=cursor|onclick=exportMergeFields(1)|Field IDs",
-            "br"
-        ]);
-    }
+    // CMSMailbox adaptation (port-by-copy from CMS's InteractiveForm.js): CMS shows
+    // Merge Field Matrix/Merge Fields/Field IDs links here for form-admin companies —
+    // these are form-builder/export dev tools, not relevant to a mailbox recipient
+    // viewing a shared record, so this block is omitted entirely in CMSMailbox.
 
     //MULTI ANSWERS
     popMultiAnswers(js.MainID, jsMultiAnswers);

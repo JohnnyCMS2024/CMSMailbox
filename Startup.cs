@@ -12,12 +12,14 @@ namespace CMSMailbox
 {
     public class Startup
     {
-        public Startup(IConfiguration configuration)
+        public Startup(IConfiguration configuration, IWebHostEnvironment environment)
         {
             Configuration = configuration;
+            Environment = environment;
         }
 
         public IConfiguration Configuration { get; }
+        public IWebHostEnvironment Environment { get; }
 
         public void ConfigureServices(IServiceCollection services)
         {
@@ -26,19 +28,23 @@ namespace CMSMailbox
             // requests through to CMSNEO itself — see DB.CmsUrl.
             services.AddHttpClient();
 
-            // Named client, forced to TLS 1.2: .NET 9's HttpClient defaults to
-            // negotiating TLS 1.3 first, which some corporate on-path TLS-inspection
-            // proxies mishandle even though browsers (which fall back more
-            // gracefully) connect to the same host fine — surfaced locally as
-            // AuthenticationException: "remote party sent a TLS alert:
-            // 'ProtocolVersion'" calling CMSNEO's own domain. Only affects this local
-            // dev environment's outbound path; use "CmsProxy" from
-            // IaViewerController instead of the default client for that reason.
-            services.AddHttpClient("CmsProxy")
-                .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            // Named client, used instead of the default one for that same proxy path.
+            // Local dev only: force TLS 1.2, since .NET 9's default TLS 1.3-first
+            // negotiation gets rejected by this environment's corporate on-path
+            // TLS-inspection proxy (AuthenticationException: "remote party sent a TLS
+            // alert: 'ProtocolVersion'"). On Azure this restriction backfires — it
+            // caused a DIFFERENT failure there (SEC_E_UNSUPPORTED_FUNCTION, an
+            // Azure Windows sandbox cipher-suite limitation that only shows up once
+            // TLS 1.3 is excluded) — so Production uses the default handler, letting
+            // .NET negotiate whichever protocol actually works for that path.
+            var httpClientBuilder = services.AddHttpClient("CmsProxy");
+            if (Environment.IsDevelopment())
+            {
+                httpClientBuilder.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
                 {
                     SslProtocols = SslProtocols.Tls12
                 });
+            }
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
